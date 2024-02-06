@@ -20,4 +20,4 @@ jobs:
 
      #finally build your app with the latest command
       - name: Build and test with Maven
-        run: mvn --batch-mode --update-snapshots package
+        run: mvn clean verify ./java/simple-api-student-main/
