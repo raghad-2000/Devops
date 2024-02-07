@@ -21,7 +21,8 @@ jobs:
      #finally build your app with the latest command
       - name: Build and test with Maven
         working-directory: ./java/simple-api-student-main/
-        run: mvn verify
+        run: mvn -B verify sonar:sonar -Dsonar.projectKey=raghad-2000_Devops -Dsonar.organization=raghad-2000 -Dsonar.host.url=https://sonarcloud.io -Dsonar.login=${{ secrets.SONAR_TOKEN }} 
+
 
       # define job to build and publish docker image
   build-and-push-docker-image:
@@ -45,24 +46,22 @@ jobs:
           # Note: tags has to be all lower-case
           tags:  ${{secrets.DOCKERHUB_USERNAME}}/tp-devops-simple-api:latest
           push: ${{ github.ref == 'refs/heads/master' }}
-
+      
+      #Database
       - name: Build image and push database
         uses: docker/build-push-action@v3
         with: 
           context: ./db/
           tags: ${{secrets.DOCKERHUB_USERNAME}}/tp-devops-simple-api:latest
           push: ${{ github.ref == 'refs/heads/master' }}
-          # DO the same for database
 
+      #httpd
       - name: Build image and push httpd
         uses: docker/build-push-action@v3
         with: 
           context: ./proxy/
           tags: ${{secrets.DOCKERHUB_USERNAME}}/tp-devops-simple-api:latest
           push: ${{ github.ref == 'refs/heads/master' }}
-          
-        # DO the same for httpd
-      
 
 
 

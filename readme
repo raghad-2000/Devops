@@ -231,6 +231,8 @@ sudo docker run -dit --name my-running-app -p 8081:81 raghad/apache2
 
 # TP2
 
+## First steps into the CI World
+
 git Init
 
 git add . 
@@ -284,3 +286,43 @@ set up JDK 17
 
 precise where the mvn verify will be executed :
 - working directory 
+
+## First steps into the CD World
+
+we add build-and-push-docker-image job to the main.yml 
+specify that it needs the test-back-end to be done before it executes 
+
+in build image and push backend we specify the path where the Dockerfile is (context) and the dockerHub repository that it is published to (tags)
+finaly (push) that publish the images 
+
+we add in github, directory, settings, secrets and variables the enviroment variables we use in the main.yml to login to dockerhub
+
+```
+build-and-push-docker-image:
+    needs: test-backend
+    # run only when code is compiling and tests are passing
+    runs-on: ubuntu-22.04
+
+    # steps to perform in job
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2.5.0
+
+      - name: Login to DockerHub
+        run: docker login -u ${{ secrets.DOCKERHUB_USERNAME }} -p ${{ secrets.DOCKERHUB_TOKEN }}
+     
+      - name: Build image and push backend
+        uses: docker/build-push-action@v3
+        with:
+          # relative path to the place where source code with Dockerfile is located
+          context: ./java/simple-api-student-main/
+          # Note: tags has to be all lower-case
+          tags:  ${{secrets.DOCKERHUB_USERNAME}}/tp-devops-simple-api:latest
+          push: ${{ github.ref == 'refs/heads/master' }}
+      
+```
+
+We do the same (Build image and push backend) for database and httpd 
+
+Now we have our working CI & docker images pushed to the dockerhub repository
+
