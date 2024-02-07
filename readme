@@ -1,0 +1,286 @@
+
+# Project Title
+
+A brief description of what this project does and who it's for
+
+
+# DevOps - TP1
+
+## Database 
+
+### Basics
+#### 1-1 Document your database container essentials: commands and Dockerfile.
+
+Dockerfile : 
+```
+FROM postgres:14.1-alpine
+
+ENV POSTGRES_DB=db \
+   POSTGRES_USER=usr \
+   POSTGRES_PASSWORD=pwd
+```
+build : 
+
+```
+$ docker build -t raghad/tp1 .
+```
+create network:
+
+```
+$ docker network create app-network
+
+```
+restart adminer :
+```
+$ docker run \
+    -p "8090:8080" \
+    --net=app-network \
+    --name=adminer \
+    -d \
+    adminer
+```
+run docker image:
+```
+sudo docker run -p 8888:5000 --net=app-network --name tp1 raghad/tp1
+```
+
+**Why should we run the container with a flag -e to give the environment variables?**
+
+-e is how you pass environment variables to the container to avoid putting sensitive data in Dockerfiles. 
+
+so we remove POSTGRES_PASSWORD=pwd from Dockerfile and the new run commande will be :
+```
+sudo docker run -p 8888:5000 -d -e POSTGRES_PASSWORD=pwd --net=app-network --name tp1 raghad/tp1
+```
+---
+
+### Database Init 
+
+Create files CreateScheme.sql and InsertData.sql
+
+Dockerfile : 
+```
+FROM postgres:14.1-alpine
+
+ENV POSTGRES_DB=db \
+   POSTGRES_USER=usr 
+
+# INIT db
+COPY CreateScheme.sql /usr/src/app/
+COPY InsertData.sql /usr/src/app/
+
+```
+
+**Why do we need a volume to be attached to our postgres container?**
+
+To persist data durably on the host disk in case the database container get destroyed
+
+now we have :
+```
+& docker run -p 8888:5000 -d -e POSTGRES_PASSWORD=pwd --net=app-network -v /my/own/datadir:/var/lib/postgresql/data --name tp1 raghad/tp1
+```
+
+## Backend API
+
+### Basics
+
+create the Main.java
+
+add the code in it :
+```
+public class Main {
+
+   public static void main(String[] args) {
+       System.out.println("Hello World!");
+   }
+}
+```
+
+Compile with your target Java: javac Main.java
+
+Write dockerfile : 
+```
+FROM openjdk:11
+COPY . /usr/src/myapp
+WORKDIR /usr/src/myapp
+RUN javac Main.java
+CMD ["java", "Main"]
+```
+
+build : 
+```
+docker build -t raghad/java .
+```
+run :
+```
+docker run raghad/java
+```
+Hello World displayed :)
+
+### Multistage build
+
+Create and generate Springboot application on: Spring Initializer
+
+create GreetingController.java at 
+```
+src
+├── main
+│   ├── java
+│   │   └── fr
+│   │       └── takima
+│   │           └── training
+│   │               └── simpleapi
+│   │                   ├── controller
+                            └── GreetingController.java
+```
+build : 
+```
+docker build -t java .
+```
+run : 
+```
+docker run -d -p 8080:8080 java 
+```
+
+
+
+**1-2 Why do we need a multistage build? And explain each step of this dockerfile.**
+
+To contain the build in only one Dockerfile, it wont be necessary to have a seperate build script.
+
+```
+# Build
+FROM maven:3.8.6-amazoncorretto-17 AS myapp-build    
+ENV MYAPP_HOME /opt/myapp   
+WORKDIR $MYAPP_HOME   
+COPY pom.xml .   
+COPY src ./src   
+RUN mvn package -DskipTests   
+
+# Run
+FROM amazoncorretto:17     
+ENV MYAPP_HOME /opt/myapp    
+WORKDIR $MYAPP_HOME   
+COPY --from=myapp-build $MYAPP_HOME/target/*.jar $MYAPP_HOME/myapp.jar
+
+ENTRYPOINT java -jar myapp.jar
+```
+
+yml :
+```
+spring:
+  jpa:
+    properties:
+      hibernate:
+        jdbc:
+          lob:
+            non_contextual_creation: true
+    generate-ddl: false
+    open-in-view: true
+  datasource:
+    url: jdbc:postgresql://tp1:5432/db
+    username: usr
+    password: pwd
+    driver-class-name: org.postgresql.Driver
+management:
+ server:
+   add-application-context-header: false
+ endpoints:
+   web:
+     exposure:
+       include: health,info,env,metrics,beans,configprops
+
+```
+
+build : 
+```
+docker build -t raghad/java .
+```
+run :
+```
+doker run -p 8080:8080 -d --net=app-network --name java2 java2
+```
+now we can access our application API on: /departments/IRC/students.
+
+
+---
+
+## Http server
+### Basics
+
+Dockerfile : 
+```
+FROM httpd:2.4
+
+COPY ./html/ /usr/local/apache2/htdocs/
+```
+build : 
+```
+sudo docker build -t raghad/apache2 .
+```
+run : 
+```
+sudo docker run -dit --name my-running-app -p 8081:81 raghad/apache2
+```
+
+### Reverse proxy 
+
+
+
+
+
+# TP2
+
+git Init
+
+git add . 
+
+git remote add master <project_url_with_https>
+
+git push master
+
+
+2-1 What are testcontainers?
+
+They simply are java libraries that allow you to run a bunch of docker containers while testing. 
+
+Devops/.github/workflows/main.yml
+
+2-2 Document your Github Actions configurations.
+
+```
+name: CI devops 2023
+on:
+  #to begin you want to launch this job in main and develop
+  push:
+    branches: master 
+
+jobs:
+  test-backend: 
+    runs-on: ubuntu-22.04
+    steps:
+     #checkout your github code using actions/checkout@v2.5.0
+      - uses: actions/checkout@v2.5.0
+
+     #do the same with another action (actions/setup-java@v3) that enable to setup jdk 17
+      - name: Set up JDK 17
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'adopt'
+
+     #finally build your app with the latest command
+      - name: Build and test with Maven
+        working-directory: java/simple-api-student-main/
+        run: mvn verify
+```
+set up when we want to test the back end :  
+- push
+
+what branch :  
+- master
+
+set up JDK 17 
+
+precise where the mvn verify will be executed :
+- working directory 
