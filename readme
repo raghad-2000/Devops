@@ -135,11 +135,12 @@ src
 ```
 build : 
 ```
-docker build -t java .
+docker build -t raghad/java .
 ```
 run : 
 ```
-docker run -d -p 8080:8080 java 
+docker run -d --net=app-network -p 8080:8080 java raghad/java
+sudo docker run --name my-running-app --net=app-network -p 8081:80 raghad/my-apache2
 ```
 
 
