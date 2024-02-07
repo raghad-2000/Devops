@@ -52,7 +52,7 @@ jobs:
         uses: docker/build-push-action@v3
         with: 
           context: ./db/
-          tags: ${{secrets.DOCKERHUB_USERNAME}}/tp-devops-simple-api:latest
+          tags: ${{secrets.DOCKERHUB_USERNAME}}/tp-devops-db:latest
           push: ${{ github.ref == 'refs/heads/master' }}
 
       #httpd
@@ -60,7 +60,7 @@ jobs:
         uses: docker/build-push-action@v3
         with: 
           context: ./proxy/
-          tags: ${{secrets.DOCKERHUB_USERNAME}}/tp-devops-simple-api:latest
+          tags: ${{secrets.DOCKERHUB_USERNAME}}/tp-devops-httpd:latest
           push: ${{ github.ref == 'refs/heads/master' }}
 
 
