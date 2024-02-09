@@ -326,4 +326,398 @@ build-and-push-docker-image:
 We do the same (Build image and push backend) for database and httpd 
 
 Now we have our working CI & docker images pushed to the dockerhub repository
+---
+Why did we put needs: build-and-test-backend on this job? 
+
+Because we need the application to be compiled before building our docker image.
+---
+For what purpose do we need to push docker images?
+
+By pushing Docker images, they become retrievable from any Docker, which can prove very useful for easy and rapid deployment.
+---
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+### Setup Quality Gate
+
+**Sonar** : Code monitoring platform for analysis purposes.
+
+After configuring Sonar by linking it to the GitHub repository, we add the analysis to our file `main.yml` : 
+
+```yml
+      - name: Build and test with Maven
+        working-directory: simple-api-student/
+        run: mvn -B verify sonar:sonar -Dsonar.projectKey=Thomas0507_devOps-TP01 -Dsonar.organization=thomas0507 -Dsonar.host.url=https://sonarcloud.io -Dsonar.login=${{ secrets.SONAR_TOKEN }}
+```
+
+We had to add the Sonar tokens to our GitHub secrets.
+
+
+Document your quality gate configuration.
+
+We are using the sonar way, the default quality gate. The code passes the quality test if:
+
+    There are no new bugs.
+    There are no new vulnerabilities.
+    New code has limited technical debt.
+    All new security hotspots are covered.
+    Sufficient tests cover the new code (> 80%).
+    There is minimal duplication in the new code (< 3%)."
+
+
+## TP 03 - Ansible 🛸🛸🛸
+
+We install Ansible and create an inventory file at the root:
+
+```
+mkdir ansible
+cd ansible
+mkdir inventories
+cd inventories
+touch setup.yml
+```
+
+setup.yml:
+```
+ all:
+ vars:
+   ansible_user: centos
+   ansible_ssh_private_key_file: ../../id_rsa
+ children:
+   prod:
+     hosts: raghad.al-homsi.takima.cloud
+```
+
+ping:
+
+```
+sudo ansible all -i setup.yml -m ping
+```
+
+Response:
+```
+thomas.marin.takima.cloud | SUCCESS => {
+    "ansible_facts": {
+        "discovered_interpreter_python": "/usr/bin/python"
+    },
+    "changed": false,
+    "ping": "pong"
+}
+```
+Verify conf:
+
+```
+ansible all -i setup.yml -m setup -a  "filter=ansible_distribution*"
+```
+Réponse:
+```
+thomas.marin.takima.cloud | SUCCESS => {
+    "ansible_facts": {
+        "ansible_distribution": "CentOS",
+        "ansible_distribution_file_parsed": true,
+        "ansible_distribution_file_path": "/etc/redhat-release",
+        "ansible_distribution_file_variety": "RedHat",
+        "ansible_distribution_major_version": "7",
+        "ansible_distribution_release": "Core",
+        "ansible_distribution_version": "7.9",
+        "discovered_interpreter_python": "/usr/bin/python"
+    },
+    "changed": false
+}
+```
+
+If httpd is installed on the Ansible server, we uninstall it:
+
+```
+ansible all -i ansible/inventories/setup.yml -m yum -a "name=httpd state=absent" --become
+```
+Document your inventory and base commands
+
+Inventaire:
+- We provide the SSH key path and the username as variables.
+- We also provide the address of our server
+
+### Playbooks
+
+Create playbook.yml:
+
+```
+touch ansible/playbook.yml
+```
+
+Ping:
+
+```
+ansible-playbook -i inventories/setup.yml playbook.yml
+```
+
+
+### Advanced Playbooks
+
+```
+- hosts: all
+  gather_facts: false
+  become: true
+
+# Install Docker
+  tasks:
+
+  - name: Install device-mapper-persistent-data
+    yum:
+      name: device-mapper-persistent-data
+      state: latest
+
+  - name: Install lvm2
+    yum:
+      name: lvm2
+      state: latest
+
+  - name: add repo docker
+    command:
+      cmd: sudo yum-config-manager --add-repo=https://download.docker.com/linux/centos/docker-ce.repo
+
+  - name: Install Docker
+    yum:
+      name: docker-ce
+      state: present
+
+  - name: Install python3
+    yum:
+      name: python3
+      state: present
+
+  - name: Install docker with Python 3
+    pip:
+      name: docker
+      executable: pip3
+    vars:
+      ansible_python_interpreter: /usr/bin/python3
+
+  - name: Make sure Docker is running
+    service: name=docker state=started
+    tags: docker
+```
+
+### Using Roles 
+
+Create rôle:
+
+```
+ansible-galaxy init roles/<ROLE_NAME>
+```
+
+Roles :
+- app
+- database
+- docker
+- network
+- proxy
+
+Each subdirectory of the 'roles' directory represents a role, and we can execute them from the playbook.yml.
+
+Execute the roles from the playbook.yml file:
+
+```
+  roles:
+    - app
+    - database
+    - docker
+    - network
+    - proxy
+```
+
+
+playbook.yml with the roles :
+
+
+```yml
+# Install Docker
+- hosts: all
+  gather_facts: false
+  become: true
+  vars_files:
+    - group_vars/var.yml
+  roles:
+    - docker # install docker
+    - network # créer un réseau pour les containers
+    - database # lance la db
+    - app # lance le backend
+    - proxy # lance le reverse proxy
+```
+
+
+Document your playbook
+
+We call each role to execute the tasks it contains.
+
+### Deploy your App
+
+After creating the specified roles, each one should execute a task. Their order is important, so we need to be careful. In continuation of our GitHub secrets, we need to add environment variables for the URLs, container names, network, and tokens.
+
+So we create `group_vars\var.yml` :
+
+```
+#db
+POSTGRES_CONTAINER: tp1
+POSTGRES_DB: db
+POSTGRES_USER: usr
+POSTGRES_PASSWORD: pwd
+
+# docker network
+DOCKER_NETWORK: app-network
+
+#backend
+API_CONTAINER: springboot-app-container
+```
+Then encrypt with `ansible-vault`:
+
+```bash
+ansible-vault encrypt group_vars/var.yml
+```
+
+We are asked to enter a password that will be prompted during deployment.
+
+Decrypte:
+
+```yml
+ansible-vault decrypt ansible/group_vars/var.yml
+```
+
+The different tasks executed by the roles:
+
+- docker :
+
+```yml
+- name: Install device-mapper-persistent-data
+  yum:
+    name: device-mapper-persistent-data
+    state: latest
+
+- name: Install lvm2
+  yum:
+    name: lvm2
+    state: latest
+
+- name: add repo docker
+  command:
+    cmd: sudo yum-config-manager --add-repo=https://download.docker.com/linux/centos/docker-ce.repo
+
+- name: Install Docker
+  yum:
+    name: docker-ce
+    state: present
+
+- name: Install python3
+  yum:
+    name: python3
+    state: present
+
+- name: Install docker with Python 3
+  pip:
+    name: docker
+    executable: pip3
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+
+- name: Make sure Docker is running
+  service: name=docker state=started
+  tags: docker
+```
+- network :
+```yml
+- name: Create docker network
+  community.docker.docker_network:
+    name: "{{ DOCKER_NETWORK }}" 
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+```
+- database :
+```yml
+- name: Run database
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+  docker_container:
+    name: "{{ POSTGRES_CONTAINER }}"
+    image: raghad2000/tp-devops-db:latest
+    networks:
+      - name: "{{ DOCKER_NETWORK }}"
+    env:
+      POSTGRES_DB: "{{ POSTGRES_DB }}"
+      POSTGRES_USER: "{{ POSTGRES_USER }}"
+      POSTGRES_PASSWORD: "{{ POSTGRES_PASSWORD }}"
+    volumes:
+      - myvolume:/var/lib/postgresql/data
+    recreate:
+      true
+    pull:
+      true
+```
+- app :
+```yml
+- name: Run Backend API
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+  docker_container:
+    name: "{{ API_CONTAINER }}" 
+    image: raghad2000/tp-devops-simple-api:latest
+    networks:
+      - name: "{{ DOCKER_NETWORK }}" 
+    env:
+      URL: "{{ POSTGRES_CONTAINER }}:5432" 
+      POSTGRES_DB: "{{ POSTGRES_DB }}" 
+      POSTGRES_USER: "{{ POSTGRES_USER }}" 
+      POSTGRES_PASSWORD: "{{ POSTGRES_PASSWORD }}"
+    recreate: true
+    pull: true
+```
+- proxy :
+```yml
+- name: Run HTTPD
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+  docker_container:
+    name: httpd
+    image: raghad2000/tp-devops-httpd:latest
+    networks:
+      - name: "{{ DOCKER_NETWORK }}" 
+    ports:
+      - 8080:80
+    # env:
+    #   API_URL: "{{ API_CONTAINER }}"
+    recreate: true
+    pull: true
+```
+
+
+
+Document your docker_container tasks configuration. 🇺🇸
+
+- docker: We install all dependencies and Docker using yum.
+- network: We create a Docker network with the name specified in the var.yml file and specifying the Python version.
+- database: We specify the Python version. We retrieve the Docker image of our database from Docker Hub and specify its network. We pass the superuser login credentials as environment variables. We specify the location of its volume to maintain data persistence. We ensure that the image is always rebuilt and pulled from the Docker repository.
+- app: Similar to the above, we retrieve the Docker image from Docker Hub and instantiate it with its environment variables.
+- Similarly, but here we also specify its exposed port.
+
+Since we have encrypted our var.yml, it is essential to enter the password of the vault during deployment:
+
+```bash
+sudo ansible-playbook --ask-vault-pass -i ansible/inventories/setup.yml ansible/playbook.yml
+```
+
+
+## Author
+
+- [@Raghad AL HOMSI](https://github.com/raghad-2000/Devops/tree/master)
 
